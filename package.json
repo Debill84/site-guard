@@ -1,0 +1,32 @@
+{
+  "name": "@suga/site-guard",
+  "version": "0.1.0",
+  "description": "Module rời: bảo mật + chống crawl + tối ưu tốc độ, cắm vào mọi site Express & Next.js của SugaGroup",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./express": "./src/express/index.js",
+    "./nextjs": "./src/nextjs/index.js",
+    "./core": "./src/core/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node test/smoke.js && node test/express.js && node test/perf.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "security",
+    "anti-crawl",
+    "rate-limit",
+    "performance",
+    "express",
+    "nextjs",
+    "middleware"
+  ]
+}
