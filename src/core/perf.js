@@ -49,4 +49,21 @@ function cacheControlFor(path, cacheCfg) {
   return cacheCfg.htmlDefault || null;
 }
 
-module.exports = { compressibleType, pickEncoding, cacheControlFor, COMPRESSIBLE };
+/**
+ * Preset Cache-Control sẵn dùng — đặc biệt cho site ĐỨNG SAU CLOUDFLARE.
+ * `cdnDynamic`: trình duyệt không cache, nhưng CF cache 60s + phục vụ bản cũ
+ * trong khi nền tải bản mới (stale-while-revalidate) → trang động vẫn nhanh như tĩnh,
+ * giảm tải server mạnh. Khi admin sửa nội dung: purge cache CF hoặc chờ tối đa 60s.
+ */
+const CACHE_PRESETS = {
+  // HTML động sau Cloudflare: nhanh mà vẫn tươi (CF cache 60s, nền làm mới tới 10 phút)
+  cdnDynamic: 'public, max-age=0, s-maxage=60, stale-while-revalidate=600',
+  // Asset đã hash tên file (Next.js /_next/static…): cache vĩnh viễn an toàn
+  cdnStaticImmutable: 'public, max-age=31536000, immutable',
+  // Asset tên cố định (clone WordPress): cache ngắn ở CF, trình duyệt revalidate
+  cdnStaticNamed: 'public, max-age=600, s-maxage=86400, stale-while-revalidate=86400',
+  // Không cache gì (trang nhạy cảm: admin, giỏ hàng…)
+  noStore: 'no-store, max-age=0',
+};
+
+module.exports = { compressibleType, pickEncoding, cacheControlFor, COMPRESSIBLE, CACHE_PRESETS };
