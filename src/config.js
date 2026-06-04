@@ -36,6 +36,10 @@ function defaultConfig() {
         // Cách ly cross-origin (chặt) — tắt mặc định để không vỡ embed bên thứ 3
         crossOriginOpenerPolicy: false, // vd 'same-origin'
         crossOriginResourcePolicy: false, // vd 'same-origin'
+        // --- v0.2: bổ sung cho ngang helmet (đều an toàn, mặc định bật) ---
+        originAgentCluster: true, // 'Origin-Agent-Cluster: ?1' — cách ly tiến trình theo origin
+        dnsPrefetchControl: 'off', // 'X-DNS-Prefetch-Control: off' — bớt rò rỉ DNS
+        permittedCrossDomainPolicies: 'none', // chặn Flash/PDF nạp policy chéo (legacy)
       },
     },
 
@@ -67,6 +71,9 @@ function defaultConfig() {
         allowSearchEngines: true,
         // Chặn request KHÔNG có User-Agent (thường là script cào)
         blockEmptyUserAgent: true,
+        // v0.2: chặn bot AI cào dữ liệu (GPTBot, ClaudeBot, PerplexityBot...).
+        // MẶC ĐỊNH TẮT — nhiều site marketing MUỐN AI index. Bật theo từng site.
+        blockAiScrapers: false,
         statusCode: 403,
         message: 'Truy cập bị từ chối.',
       },

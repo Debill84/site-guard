@@ -82,6 +82,50 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
 - **Cache-Control: MẶC ĐỊNH TẮT** — vì asset của site clone (WordPress) **không có hash tên file**,
   cache "immutable" sẽ làm khách kẹt CSS cũ sau khi cập nhật. Bật + thêm rule khi asset đã hash tên.
 
+## v0.2 — Tính năng mới
+
+### 🛡️ Chống CSRF (double-submit + HMAC, 0 phụ thuộc)
+```js
+const { csrfProtection } = require('@suga/site-guard/express');
+const csrf = csrfProtection({ secret: process.env.SESSION_SECRET });
+app.use(csrf);
+// Render form (EJS): <input type="hidden" name="_csrf" value="<%= req.csrfToken() %>">
+// Hoặc JS gửi header: X-CSRF-Token: <token lấy từ <meta>>
+```
+GET tự phát cookie; POST/PUT/PATCH/DELETE bắt buộc token khớp, sai → 403. `ignorePaths` để bỏ qua webhook.
+
+### 🤖 Turnstile (CAPTCHA Cloudflare miễn phí) cho form/login
+```js
+const { createTurnstile, turnstileWidget, turnstileScript } = require('@suga/site-guard/express');
+const ts = createTurnstile({ secret: process.env.TURNSTILE_SECRET });
+app.post('/api/contact', express.urlencoded({extended:true}), ts.middleware(), handler);
+// Trong <head>: turnstileScript()   |   Trong <form>: turnstileWidget(process.env.TURNSTILE_SITEKEY)
+```
+Lấy key: Cloudflare dashboard → Turnstile → Add site (SITE KEY gắn web, SECRET KEY cho server).
+
+### 🪤 Honeypot (chống bot điền form, không phiền người thật)
+```js
+const { honeypot, honeypotField } = require('@suga/site-guard/express');
+app.post('/api/contact', express.urlencoded({extended:true}), honeypot(), handler);
+// Trong <form>: honeypotField()   ← ô ẩn, người thật để trống, bot tự điền → chặn
+```
+
+### ⚡ Cache thông minh cho Cloudflare (tăng tốc trang động)
+```js
+const { cache, CACHE_PRESETS } = require('@suga/site-guard/express');
+app.get('/', cache(CACHE_PRESETS.cdnDynamic), handler);   // CF cache 60s + stale-while-revalidate
+app.use('/admin', cache(CACHE_PRESETS.noStore));          // admin: không cache
+```
+`cdnDynamic` = trang động được Cloudflare phục vụ như tĩnh → nhanh & giảm tải server. Admin sửa nội dung: purge cache CF hoặc chờ tối đa 60s.
+
+### Chặn bot AI (tùy chọn — mặc định TẮT để giữ AI index)
+```js
+app.use(siteGuard({ antiCrawl: { bots: { blockAiScrapers: true } } })); // chặn GPTBot/ClaudeBot/PerplexityBot...
+```
+
+### Headers bổ sung (tự động, ngang helmet)
+Origin-Agent-Cluster, X-DNS-Prefetch-Control, X-Permitted-Cross-Domain-Policies.
+
 ## Cấu hình
 
 Xem toàn bộ mặc định + giải thích trong [`src/config.js`](src/config.js). Mọi nhóm có cờ `enabled`

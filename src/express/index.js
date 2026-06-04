@@ -92,6 +92,66 @@ function siteGuard(userConfig) {
   };
 }
 
+/**
+ * Helper HONEYPOT — chống bot điền form (đăng ký, liên hệ).
+ * Thêm 1 ô input ẨN trên form; người thật để trống, bot tự điền → chặn.
+ *
+ * Dùng:
+ *   const { honeypot, honeypotField } = require('@suga/site-guard/express');
+ *   // render form: chèn honeypotField() vào trong <form>
+ *   app.post('/api/contact', honeypot(), express.urlencoded({extended:true}), handler)
+ *   // LƯU Ý: honeypot() phải chạy SAU khi body đã parse → đặt sau urlencoded.
+ *
+ * @param {object} [opts] - { field?:string, statusCode?:number, message?:string }
+ */
+const HONEYPOT_FIELD = 'sg_hp_url';
+function honeypot(opts = {}) {
+  const field = opts.field || HONEYPOT_FIELD;
+  const statusCode = opts.statusCode || 400;
+  const message = opts.message || 'Yêu cầu không hợp lệ.';
+  return function honeypotMiddleware(req, res, next) {
+    const val = req.body && req.body[field];
+    if (val != null && String(val).trim() !== '') {
+      // eslint-disable-next-line no-console
+      console.warn('[site-guard] block honeypot', JSON.stringify({ path: req.path }));
+      return res.status(statusCode).send(message);
+    }
+    return next();
+  };
+}
+
+/** Trả về đoạn HTML ô ẩn để chèn vào <form>. Người thật không thấy/không điền. */
+function honeypotField(field = HONEYPOT_FIELD) {
+  return `<div style="position:absolute;left:-9999px" aria-hidden="true">`
+    + `<label>Để trống ô này<input type="text" name="${field}" tabindex="-1" autocomplete="off"></label></div>`;
+}
+
+/**
+ * Helper CACHE theo route — đặt Cache-Control chính xác cho 1 nhóm route.
+ * Chuẩn hơn cache theo path-prefix; rất hợp khi site đứng sau Cloudflare.
+ *
+ * Dùng:
+ *   const { cache, CACHE_PRESETS } = require('@suga/site-guard/express');
+ *   app.get('/', cache(CACHE_PRESETS.cdnDynamic), handler)   // CF cache trang chủ 60s
+ *   app.use('/admin', cache(CACHE_PRESETS.noStore))          // admin không cache
+ */
+function cache(value) {
+  return function cacheMiddleware(_req, res, next) {
+    if (value) res.setHeader('Cache-Control', value);
+    next();
+  };
+}
+
 module.exports = siteGuard;
 module.exports.siteGuard = siteGuard;
 module.exports.getClientIp = getClientIp;
+module.exports.honeypot = honeypot;
+module.exports.honeypotField = honeypotField;
+module.exports.HONEYPOT_FIELD = HONEYPOT_FIELD;
+module.exports.cache = cache;
+module.exports.CACHE_PRESETS = require('../core/perf').CACHE_PRESETS;
+module.exports.csrfProtection = require('./csrf').csrfProtection;
+const _ts = require('./turnstile');
+module.exports.createTurnstile = _ts.createTurnstile;
+module.exports.turnstileWidget = _ts.turnstileWidget;
+module.exports.turnstileScript = _ts.turnstileScript;

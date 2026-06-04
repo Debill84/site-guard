@@ -29,8 +29,21 @@ const BAD_BOTS = [
   'mj12bot', 'dotbot', 'petalbot', 'bytespider',
 ];
 
+// Bot AI cào dữ liệu để huấn luyện/tổng hợp — chặn TÙY CHỌN (blockAiScrapers)
+const AI_SCRAPERS = [
+  'gptbot', 'oai-searchbot', 'chatgpt-user', 'claudebot', 'claude-web',
+  'anthropic-ai', 'perplexitybot', 'ccbot', 'google-extended', 'bytespider',
+  'amazonbot', 'applebot-extended', 'cohere-ai', 'diffbot', 'imagesiftbot',
+  'omgili', 'omgilibot', 'facebookbot', 'meta-externalagent', 'timpibot',
+];
+
 function lc(s) {
   return (s || '').toLowerCase();
+}
+
+function isAiScraper(ua) {
+  const u = lc(ua);
+  return AI_SCRAPERS.some((b) => u.includes(b));
 }
 
 function isGoodBot(ua) {
@@ -63,7 +76,11 @@ function inspectUserAgent(ua, botsCfg) {
     return { block: botsCfg.mode === 'block', reason: 'bad-bot-signature', good: false };
   }
 
+  if (botsCfg.blockAiScrapers && isAiScraper(ua)) {
+    return { block: botsCfg.mode === 'block', reason: 'ai-scraper', good: false };
+  }
+
   return { block: false, reason: null, good };
 }
 
-module.exports = { inspectUserAgent, isGoodBot, isBadBot, GOOD_BOTS, BAD_BOTS };
+module.exports = { inspectUserAgent, isGoodBot, isBadBot, isAiScraper, GOOD_BOTS, BAD_BOTS, AI_SCRAPERS };

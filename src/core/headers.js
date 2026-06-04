@@ -35,6 +35,13 @@ function buildSecurityHeaders(securityCfg, ctx = {}) {
 
   if (h.crossOriginResourcePolicy) headers['Cross-Origin-Resource-Policy'] = String(h.crossOriginResourcePolicy);
 
+  // --- v0.2: bổ sung cho ngang helmet ---
+  if (h.originAgentCluster) headers['Origin-Agent-Cluster'] = '?1';
+
+  if (h.dnsPrefetchControl) headers['X-DNS-Prefetch-Control'] = String(h.dnsPrefetchControl);
+
+  if (h.permittedCrossDomainPolicies) headers['X-Permitted-Cross-Domain-Policies'] = String(h.permittedCrossDomainPolicies);
+
   // Header "Server" tùy biến để ẩn phiên bản hạ tầng
   if (securityCfg.serverHeader) headers['Server'] = String(securityCfg.serverHeader);
 
