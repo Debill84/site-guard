@@ -43,7 +43,7 @@ app.use(siteGuard({
 }));
 ```
 
-## Dùng với Next.js (NhoNho / DynamicDev / Marketing-AI)
+## Dùng với Next.js (NhoNho / SugaHub / Marketing-AI)
 
 Trong `src/middleware.ts`:
 
