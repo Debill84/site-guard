@@ -10,12 +10,14 @@
  * Lấy key: dashboard Cloudflare → Turnstile → Add site → có SITE KEY (gắn web) + SECRET KEY (server).
  */
 
+const { forwardedClientIp } = require('../core/ip');
+
 const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 function getIp(req) {
   const xff = req.headers && req.headers['x-forwarded-for'];
-  if (xff) return String(xff).split(',')[0].trim();
-  return undefined;
+  // Đuôi phải XFF = IP do proxy tin cậy nối vào (không lấy phần client tự bịa).
+  return forwardedClientIp(xff, true) || undefined;
 }
 
 /**

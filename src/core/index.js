@@ -4,6 +4,7 @@ const { resolveConfig } = require('../config');
 const { buildSecurityHeaders } = require('./headers');
 const { createRateLimiter } = require('./ratelimit');
 const { inspectUserAgent } = require('./bot');
+const { forwardedClientIp } = require('./ip');
 const perf = require('./perf');
 
 /** path bắt đầu bằng bất kỳ tiền tố nào trong list? */
@@ -112,6 +113,7 @@ module.exports = {
   buildSecurityHeaders,
   createRateLimiter,
   inspectUserAgent,
+  forwardedClientIp,
   startsWithAny,
   ...perf,
 };
