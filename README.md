@@ -8,6 +8,28 @@ Một lõi dùng chung, hai đầu cắm: **Express** và **Next.js**.
 
 ---
 
+## ⚠️ Repo này là NGUỒN DUY NHẤT của SiteGuard — ĐỪNG tạo bản sao
+
+Mọi nơi dùng SiteGuard đều ghim thẳng repo này qua git-ref, ví dụ:
+
+```jsonc
+"@suga/site-guard": "github:Debill84/site-guard#v0.2.2"
+```
+
+Consumer hiện tại: 7 web LIVE (santamarket-web · nhonho-code · sghub · santapocket-site ·
+marketing-ai · fidesholding-site · sugagroup-site) **và** `suga-backend-kit/apps/fides-kit`.
+
+**KHÔNG copy code này thành package thứ hai** (ví dụ `packages/site-guard` trong monorepo). Trước đây
+từng có bản sao `@suga-co/site-guard` trong `suga-backend-kit` → mỗi lần vá lỗ phải sửa 2 chỗ, dễ sót
+(đã dính đúng khi vá lỗ rate-limit XFF). Bản sao đó đã bị xoá, monorepo nay trỏ về đây.
+
+> **Vì sao repo này (PUBLIC) bắt buộc là nguồn chính:** SiteGuard là dependency **chạy-thật production**.
+> Web deploy trên Railway bằng `npm ci` **không có token kho riêng** → chỉ **git-ref tới repo PUBLIC**
+> mới cài được token-free. Một package private (GitHub Packages, cần token) sẽ làm **gãy deploy**. Vá lỗ
+> → sửa ở đây, bump version, tag mới; consumer bump git-ref là xong.
+
+---
+
 ## Cài đặt
 
 Đây là module nội bộ. Cài từ git (hoặc copy thư mục vào dự án):
