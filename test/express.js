@@ -8,6 +8,7 @@
 
 const assert = require('assert');
 const siteGuard = require('../src/express');
+const { forwardedClientIp } = require('../src/core/ip');
 
 let pass = 0; let fail = 0;
 function test(name, fn) {
@@ -80,6 +81,45 @@ test('IP đọc từ X-Forwarded-For khi sau proxy', () => {
   assert.strictEqual(a2.nexted, false);
   assert.strictEqual(a2.res.statusCode, 429);
   assert.ok(a2.res.getHeader('retry-after'), 'phải có Retry-After');
+});
+
+// forwardedClientIp: chọn ĐUÔI PHẢI (proxy nối vào), KHÔNG lấy trái-nhất (client bịa)
+test('forwardedClientIp: 1 hop → lấy phần tử phải-nhất, bỏ phần client bịa bên trái', () => {
+  assert.strictEqual(forwardedClientIp('1.2.3.4, 100.100.100.100', true), '100.100.100.100');
+  assert.strictEqual(forwardedClientIp('9.9.9.9', true), '9.9.9.9');
+  assert.strictEqual(forwardedClientIp('  a ,  b ,  c ', true), 'c');
+  assert.strictEqual(forwardedClientIp('', true), null);
+  assert.strictEqual(forwardedClientIp(undefined, true), null);
+});
+test('forwardedClientIp: N hop → lùi N bậc từ phải; thiếu mục thì về trái-nhất', () => {
+  assert.strictEqual(forwardedClientIp('client, cf, railway', 2), 'cf');   // 2 proxy tin cậy
+  assert.strictEqual(forwardedClientIp('only-one', 2), 'only-one');        // ít hơn số hop
+});
+
+test('trustProxy=2 (Cloudflare→Railway): khóa theo client THẬT ở giữa, không phải IP Cloudflare', () => {
+  const mw = siteGuard({ trustProxy: 2, antiCrawl: { rateLimit: { max: 1, windowMs: 60000 }, strictPaths: { enabled: false } } });
+  const ua = 'Mozilla/5.0 Chrome/120';
+  const CF = '172.16.0.9'; // IP Cloudflare (phải-nhất, dùng chung nhiều khách)
+  // XFF = "clientThật, IP-Cloudflare"; 2 hop tin cậy → lấy client thật (bậc 2 từ phải)
+  const a1 = run(mw, mockReq({ ua, headers: { 'x-forwarded-for': `55.55.55.55, ${CF}` } }));
+  const b1 = run(mw, mockReq({ ua, headers: { 'x-forwarded-for': `66.66.66.66, ${CF}` } }));
+  assert.strictEqual(a1.nexted, true, 'client 55 lần đầu qua');
+  assert.strictEqual(b1.nexted, true, 'client 66 KHÁC người → còn quota riêng (không bị gộp theo IP Cloudflare)');
+  const a2 = run(mw, mockReq({ ua, headers: { 'x-forwarded-for': `55.55.55.55, ${CF}` } }));
+  assert.strictEqual(a2.res.statusCode, 429, 'client 55 lần 2 → dính giới hạn của chính nó');
+});
+
+test('CHỐNG LÁCH RATE-LIMIT: đổi IP giả ở đầu XFF vẫn KHÔNG lách được (cùng client thật)', () => {
+  const mw = siteGuard({ antiCrawl: { rateLimit: { max: 1, windowMs: 60000 }, strictPaths: { enabled: false } } });
+  const ua = 'Mozilla/5.0 Chrome/120';
+  const REAL = '203.0.113.7'; // IP thật do proxy Railway nối vào ĐUÔI PHẢI
+  // Lần 1: kẻ tấn công bịa '1.1.1.1' ở đầu → key phải là REAL (đuôi phải)
+  const r1 = run(mw, mockReq({ ua, headers: { 'x-forwarded-for': `1.1.1.1, ${REAL}` } }));
+  assert.strictEqual(r1.nexted, true, 'lần đầu cho qua');
+  // Lần 2: đổi IP bịa sang '2.2.2.2' (cùng client thật) → PHẢI dính 429, không được reset quota
+  const r2 = run(mw, mockReq({ ua, headers: { 'x-forwarded-for': `2.2.2.2, ${REAL}` } }));
+  assert.strictEqual(r2.nexted, false, 'đổi IP giả KHÔNG được cấp quota mới');
+  assert.strictEqual(r2.res.statusCode, 429);
 });
 
 console.log(`\nKết quả: ${pass} PASS, ${fail} FAIL`);

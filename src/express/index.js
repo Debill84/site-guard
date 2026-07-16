@@ -2,13 +2,15 @@
 
 const { createGuard } = require('../core');
 const { cacheControlFor } = require('../core/perf');
+const { forwardedClientIp } = require('../core/ip');
 const { wrapResponseForCompression } = require('./compress');
 
 /** Lấy IP thật của client (đứng sau proxy Railway/Cloudflare nếu trustProxy). */
 function getClientIp(req, trustProxy) {
   if (trustProxy) {
-    const xff = req.headers['x-forwarded-for'];
-    if (xff) return String(xff).split(',')[0].trim();
+    // Lấy IP do proxy tin cậy nối vào ĐUÔI PHẢI XFF (không tin phần client tự bịa).
+    const fromXff = forwardedClientIp(req.headers['x-forwarded-for'], trustProxy);
+    if (fromXff) return fromXff;
     const real = req.headers['x-real-ip'];
     if (real) return String(real).trim();
   }
@@ -63,7 +65,8 @@ function siteGuard(userConfig) {
 
       const decision = guard.evaluate({
         path: reqPath,
-        ip: getClientIp(req, trustProxy),
+        // Truyền GIÁ TRỊ GỐC (true=1 hop, hoặc số hop) để đếm đúng bậc proxy tin cậy.
+        ip: getClientIp(req, cfg.trustProxy),
         userAgent: req.headers['user-agent'] || '',
         isHttps: isHttps(req, trustProxy),
         now: Date.now(),
