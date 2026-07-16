@@ -27,13 +27,15 @@
  */
 
 const { createGuard } = require('../core');
+const { forwardedClientIp } = require('../core/ip');
 
 function getClientIp(req, trustProxy) {
   const headers = req.headers;
   const get = (k) => (typeof headers.get === 'function' ? headers.get(k) : headers[k]);
   if (trustProxy) {
-    const xff = get('x-forwarded-for');
-    if (xff) return String(xff).split(',')[0].trim();
+    // Lấy IP do proxy tin cậy nối vào ĐUÔI PHẢI XFF (không tin phần client tự bịa).
+    const fromXff = forwardedClientIp(get('x-forwarded-for'), trustProxy);
+    if (fromXff) return fromXff;
     const real = get('x-real-ip');
     if (real) return String(real).trim();
   }
@@ -43,7 +45,6 @@ function getClientIp(req, trustProxy) {
 function createNextGuard(userConfig) {
   const guard = createGuard(userConfig);
   const cfg = guard.config;
-  const trustProxy = cfg.trustProxy !== false;
 
   /**
    * @param {Request} req - chuẩn Web Request (NextRequest tương thích)
@@ -58,7 +59,8 @@ function createNextGuard(userConfig) {
     const proto = get('x-forwarded-proto');
     const decision = guard.evaluate({
       path,
-      ip: getClientIp(req, trustProxy),
+      // Truyền GIÁ TRỊ GỐC (true=1 hop, hoặc số hop) để đếm đúng bậc proxy tin cậy.
+      ip: getClientIp(req, cfg.trustProxy),
       userAgent: get('user-agent') || '',
       isHttps: proto ? String(proto).split(',')[0].trim() === 'https' : true,
       now: Date.now(),
