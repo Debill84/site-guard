@@ -1,6 +1,6 @@
 # 👁️ CON MẮT · Báo cáo Mắt AI soi màn đổi
 
-- Lúc soi: **2026-07-20 18:35**
+- Lúc soi: **2026-07-21 18:36**
 - Cò A (đổi): **0** · Cò B (mới): **0** · Van (trần): **10**
 - ✅ Soi 0 màn — tất cả sạch.
 
