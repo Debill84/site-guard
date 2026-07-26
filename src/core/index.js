@@ -6,6 +6,7 @@ const { createRateLimiter } = require('./ratelimit');
 const { inspectUserAgent } = require('./bot');
 const { forwardedClientIp } = require('./ip');
 const perf = require('./perf');
+const moiTruong = require('./moi-truong');
 
 /** path bắt đầu bằng bất kỳ tiền tố nào trong list? */
 function startsWithAny(path, list) {
@@ -116,4 +117,5 @@ module.exports = {
   forwardedClientIp,
   startsWithAny,
   ...perf,
+  ...moiTruong,
 };

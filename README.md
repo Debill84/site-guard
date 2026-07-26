@@ -96,6 +96,7 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
 |---|---|---|
 | 🛡️ Bảo mật | Security headers (HSTS, X-Frame-Options, nosniff, Referrer/Permissions-Policy), ẩn `X-Powered-By`, CSP (tùy chọn) | ✅ |
 | 🤖 Chống crawl | Rate-limit theo IP (chung + chặt cho path nhạy cảm), chặn bot xấu theo User-Agent, cho qua bot tìm kiếm | ✅ |
+| 🕳️ Fail-closed | `laBanThat()` + `khoaPhien()` — cấu hình vắng mặt **ngã về KHOÁ**, không rơi về khoá dev trong repo (v0.3) | ✅ |
 | ⚡ Tốc độ | Nén brotli/gzip (zlib có sẵn, **không thêm thư viện**), Cache-Control theo path | ✅ |
 
 ### Ghi chú gói Tốc độ
@@ -103,6 +104,42 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
   trang thật. Bỏ qua ảnh/video (đã nén) và body nhỏ. Lỗi nén → gửi nguyên bản (an toàn).
 - **Cache-Control: MẶC ĐỊNH TẮT** — vì asset của site clone (WordPress) **không có hash tên file**,
   cache "immutable" sẽ làm khách kẹt CSS cũ sau khi cập nhật. Bật + thêm rule khi asset đã hash tên.
+
+## v0.3 — 🕳️ "Cấu hình vắng mặt phải ngã về KHOÁ"
+
+Đúc từ **2 sự cố cùng ngày 26/07/2026** (Santa lộ mã OTP · HiDental rớt biến Supabase là vào thẳng
+quyền CHỦ). Câu hỏi đắt khi rà **không** phải "biến này đúng chưa" mà:
+
+> **"Biến này BIẾN MẤT thì hệ ngã về KHOÁ hay ngã về MỞ?"**
+
+```js
+const { laBanThat, khoaPhien } = require('@suga/site-guard/core');
+
+app.use(cookieSession({
+  name: 'sgsite_sess',
+  // THIẾU/YẾU biến ⇒ KHÔNG rơi về khoá dev nằm trong repo (ai đọc repo cũng tự ký được
+  // cookie `role: owner` → chiếm trọn CMS). Bản thật: sinh khoá ngẫu nhiên + kêu to + báo Hộp lỗi.
+  secret: khoaPhien({ khoaDev: 'dev_secret_change_me', baoLoi: (e) => observe.reportError(e) }).khoa,
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  sameSite: 'lax',
+}));
+```
+
+| Hàm | Việc |
+|---|---|
+| `laBanThat(env?)` | "Đang chạy trên bản THẬT?" — soi `NODE_ENV`, biến **đặt tên sân** (`APP_ENV`/`ENVIRONMENT`), và **dấu máy chủ của 12 nhà cung cấp** (Railway/Render/Fly/Heroku/K8s/AWS/Azure/Vercel/Netlify) + lối phổ quát `DEPLOYED=1`. Nghi ngờ → nghiêng về **bản thật**. |
+| `khoaPhien({ten,khoaDev,toiThieu,baoLoi,log,env})` | Khoá ký cookie phiên: có biến hợp lệ → dùng; thiếu/yếu/đang-là-khoá-dev → **máy thợ** dùng khoá dev, **bản thật** sinh khoá ngẫu nhiên + kêu to. Trả `{khoa, nguon, lyDo}`. |
+
+**2 cái bẫy đã trả giá để biết** (đừng dẫm lại):
+
+1. ❌ **Đừng nhận diện bản thật bằng `NODE_ENV==='production'`.** Site Express chạy `node server.js`
+   thường **không có** biến đó (đo thật: cả 3 site Suga trên Railway) ⇒ tưởng bản thật là máy thợ →
+   vẫn dùng khoá dev. *(App Next.js thì `next build/start` tự đặt — đừng suy rộng từ Next sang Express.)*
+2. ❌ **Đừng chỉ soi `RAILWAY_*`.** Rời Railway sang Fly/Render/VPS là hết biến đó ⇒ bản thật bị coi
+   là máy thợ. → xem `Bill-AI` luật *không phụ thuộc nhà cung cấp*.
+
+Cố ý **không** `process.exit`: web công khai phải sống. Hệ quả duy nhất khi thiếu biến trên bản thật
+là ai đang đăng nhập `/admin` bị đăng xuất sau mỗi lần deploy — **không phải** lỗ bảo mật.
 
 ## v0.2 — Tính năng mới
 
