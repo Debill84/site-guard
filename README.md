@@ -13,11 +13,38 @@ Một lõi dùng chung, hai đầu cắm: **Express** và **Next.js**.
 Mọi nơi dùng SiteGuard đều ghim thẳng repo này qua git-ref, ví dụ:
 
 ```jsonc
-"@suga/site-guard": "github:Debill84/site-guard#v0.2.2"
+"@suga/site-guard": "github:Debill84/site-guard#v0.3.0"
 ```
 
 Consumer hiện tại: 7 web LIVE (santamarket-web · nhonho-code · sghub · santapocket-site ·
 marketing-ai · fidesholding-site · sugagroup-site) **và** `suga-backend-kit/apps/fides-kit`.
+Cả 8 đều đã ở **v0.3.0** (27/07/2026).
+
+### 🔁 Ra tag mới thì phải LAN sang consumer — gộp ở đây KHÔNG tự lan
+
+Tag mới nằm im ở repo này thì consumer vẫn chạy bản cũ. Rà bằng:
+`grep -rn "site-guard#v" <repo>/package.json`. Khi bump, **sửa cả file lock**, vì dep kiểu git
+ghim theo **commit**, không theo tag:
+
+| Trình cài | Chỗ phải sửa trong lock | Sha nào |
+|---|---|---|
+| npm (`package-lock.json`) | dep gốc + `version` + `resolved#<sha>` | sha **COMMIT** (`git ls-remote --tags` dòng `^{}`) |
+| pnpm (`pnpm-lock.yaml`) | `specifier` + `version` + `resolution.tarball` | sha **ĐỐI TƯỢNG TAG** (dòng KHÔNG có `^{}`) — vì pnpm tải qua `codeload.github.com` |
+
+Sửa `package.json` một mình: npm vẫn kéo commit cũ (lưới xanh mà chạy bản cũ), pnpm thì đỏ
+`ERR_PNPM_OUTDATED_LOCKFILE`. Tag có chú thích ⇒ **hai sha khác nhau**, đừng dùng lẫn.
+
+### 🧪 CI của consumer chạy test đo thước này mà KHÔNG có token
+
+Nếu consumer còn gói riêng (vd `@debill84/cms` cần token) thì `npm ci` sẽ 403. Lấy đúng một gói:
+
+```bash
+GIT_SSH_COMMAND=/usr/bin/false npm i --no-save --prefix /tmp/thuoc \
+  "https://github.com/Debill84/site-guard/archive/refs/tags/v0.3.0.tar.gz"
+NODE_PATH=/tmp/thuoc/node_modules npm test
+```
+
+Repo này PUBLIC ⇒ tarball tải được **không token, không khoá SSH**, ~2 giây.
 
 **KHÔNG copy code này thành package thứ hai** (ví dụ `packages/site-guard` trong monorepo). Trước đây
 từng có bản sao `@suga-co/site-guard` trong `suga-backend-kit` → mỗi lần vá lỗ phải sửa 2 chỗ, dễ sót
