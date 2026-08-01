@@ -1,7 +1,7 @@
 {
   "name": "@suga/site-guard",
-  "version": "0.3.0",
-  "description": "Module rời: bảo mật + chống crawl + tối ưu tốc độ, cắm vào mọi site Express & Next.js của SugaGroup",
+  "version": "0.4.0",
+  "description": "Module rời: bảo mật + chống crawl + tối ưu tốc độ + ống gửi lỗi, cắm vào mọi site Express & Next.js của SugaGroup",
   "private": true,
   "license": "UNLICENSED",
   "main": "src/index.js",
@@ -15,13 +15,14 @@
       "types": "./src/nextjs/index.d.ts",
       "default": "./src/nextjs/index.js"
     },
-    "./core": "./src/core/index.js"
+    "./core": "./src/core/index.js",
+    "./observe": "./src/observe/index.js"
   },
   "files": [
     "src"
   ],
   "scripts": {
-    "test": "node test/smoke.js && node test/express.js && node test/perf.js && node test/v02.js && node test/csrf.js && node test/turnstile.js && node test/moi-truong.js"
+    "test": "node test/smoke.js && node test/express.js && node test/perf.js && node test/v02.js && node test/csrf.js && node test/turnstile.js && node test/moi-truong.js && node test/observe.js"
   },
   "engines": {
     "node": ">=18"
