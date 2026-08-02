@@ -13,12 +13,18 @@ Một lõi dùng chung, hai đầu cắm: **Express** và **Next.js**.
 Mọi nơi dùng SiteGuard đều ghim thẳng repo này qua git-ref, ví dụ:
 
 ```jsonc
-"@suga/site-guard": "github:Debill84/site-guard#v0.3.0"
+"@suga/site-guard": "github:Debill84/site-guard#v0.5.0"
 ```
 
-Consumer hiện tại: 7 web LIVE (santamarket-web · nhonho-code · sghub · santapocket-site ·
-marketing-ai · fidesholding-site · sugagroup-site) **và** `suga-backend-kit/apps/fides-kit`.
-Cả 8 đều đã ở **v0.3.0** (27/07/2026).
+Consumer hiện tại: 8 web LIVE (santamarket-web · nhonho-code · sghub · santapocket-site ·
+marketing-ai · fidesholding-site · sugagroup-site · hidental-site) **và** `suga-backend-kit/apps/fides-kit`.
+
+| Bản | Ai đang ở đó |
+|---|---|
+| **v0.5.0** (01/08/2026) | 4 site Express dùng ống lỗi: hidental-site · fidesholding-site · sugagroup-site · santapocket-site |
+| **v0.3.0** (27/07/2026) | 5 nơi còn lại — **không cần vội bump**: v0.4/v0.5 chỉ THÊM (`./observe` + lệnh `kiem-ong-loi`), không đổi một dòng nào của `./core` · `./express` · `./nextjs` |
+
+*(v0.4.0 = ống lỗi; v0.5.0 = ống lỗi **+ cái chốt canh nó**. Cắm mới thì lấy thẳng v0.5.0.)*
 
 ### 🔁 Ra tag mới thì phải LAN sang consumer — gộp ở đây KHÔNG tự lan
 
@@ -40,7 +46,7 @@ Nếu consumer còn gói riêng (vd `@debill84/cms` cần token) thì `npm ci` s
 
 ```bash
 GIT_SSH_COMMAND=/usr/bin/false npm i --no-save --prefix /tmp/thuoc \
-  "https://github.com/Debill84/site-guard/archive/refs/tags/v0.3.0.tar.gz"
+  "https://github.com/Debill84/site-guard/archive/refs/tags/v0.5.0.tar.gz"
 NODE_PATH=/tmp/thuoc/node_modules npm test
 ```
 
@@ -125,12 +131,73 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
 | 🤖 Chống crawl | Rate-limit theo IP (chung + chặt cho path nhạy cảm), chặn bot xấu theo User-Agent, cho qua bot tìm kiếm | ✅ |
 | 🕳️ Fail-closed | `laBanThat()` + `khoaPhien()` — cấu hình vắng mặt **ngã về KHOÁ**, không rơi về khoá dev trong repo (v0.3) | ✅ |
 | ⚡ Tốc độ | Nén brotli/gzip (zlib có sẵn, **không thêm thư viện**), Cache-Control theo path | ✅ |
+| 📮 Ống gửi lỗi | `createObserver()` — lỗi máy chủ tự bay về hộp lỗi SugaHub, bắn-rồi-quên, không chìa (v0.4) | ✅ |
+| 🔒 Chốt canh ống lỗi | Lệnh `kiem-ong-loi` — ai gỡ ống lỗi khỏi `server.js` là cổng ĐỎ (v0.5) | ✅ |
 
 ### Ghi chú gói Tốc độ
 - **Nén**: tự động cho nội dung văn bản (HTML/CSS/JS/JSON/SVG) ≥ 1KB. Giảm ~**70–85%** dung lượng
   trang thật. Bỏ qua ảnh/video (đã nén) và body nhỏ. Lỗi nén → gửi nguyên bản (an toàn).
 - **Cache-Control: MẶC ĐỊNH TẮT** — vì asset của site clone (WordPress) **không có hash tên file**,
   cache "immutable" sẽ làm khách kẹt CSS cũ sau khi cập nhật. Bật + thêm rule khi asset đã hash tên.
+
+## v0.4 — 📮 Ống gửi lỗi (`@suga/site-guard/observe`)
+
+Lỗi máy chủ của site tự bay về **hộp lỗi trung tâm SugaHub**, thay vì nằm chết trong log Railway
+mà không ai mở.
+
+```js
+const { createObserver } = require('@suga/site-guard/observe');
+const observe = createObserver({ slug: 'hidental-site', service: 'hidental-web' });
+
+app.use(observe.expressError());   // đặt NGAY TRƯỚC error-handler cuối
+observe.reportError(e, { route: '/admin' });   // hoặc gọi tay ở chỗ đã bắt lỗi
+```
+
+**Vì sao nó nằm ở đây.** Trước 01/08/2026 đây là **4 bản chép tay giống nhau từng byte**
+(hidental · fides · sugagroup · santapocket, md5 `27cab1e5…`). Chỗ ở "đúng lý" là
+`@suga-co/observe-web` — nhưng gói đó ship **mã TypeScript thô** (`main: ./src/index.ts`) và nằm ở
+kho gói RIÊNG, trong khi **cả 4 site đều 0 bí mật Actions** (đo bằng `gh secret list`) ⇒ cắm vào là
+CI đỏ ngay. Repo này công khai, 0 phụ thuộc, và **cả 4 đã cài sẵn** ⇒ chỉ thêm một lối vào.
+
+| Luật | Nghĩa |
+|---|---|
+| **Bắn-rồi-quên** | `reportError` trả `undefined` — **không ai await được** ⇒ khách không bao giờ phải chờ ống lỗi |
+| **Hạn giờ cứng 1,5s** | có `AbortSignal`; đầu nhận chết cũng không treo request |
+| **Tự nuốt lỗi của chính nó** | mạng chết / không có `fetch` → vẫn im, không đẻ vòng lặp lỗi |
+| **KHÔNG PII** | chỉ metadata (loại lỗi · route · stack). Không cookie, không body, không user |
+| **Không chìa** | gửi kèm `project_slug`; SugaHub định tuyến. Có `SUGAHUB_INGEST_KEY` thì dùng chìa và **bỏ** slug |
+| **Route chuẩn hoá** | `/bai-viet/123` → `/bai-viet/:id`, uuid → `:uuid` ⇒ gộp fingerprint đúng nhóm |
+| **Van tắt** | van CHÍNH là công tắc trung tâm ở SugaHub; tắt riêng 1 app: `SUGAHUB_OBSERVE=0` |
+
+ENV đè được cấu hình code (Railway đổi khỏi sửa code): `SUGAHUB_INGEST_URL` ·
+`SUGAHUB_PROJECT_SLUG` · `SUGAHUB_SERVICE` · `SUGAHUB_INGEST_KEY` · `SUGAHUB_SEVERITY`.
+
+> Mặc định severity `orange` = **CHỈ-BẮT**, engine SugaHub KHÔNG tự-vá. Route đụng tiền
+> (`thanh-toan`, `checkout`, `invoice`…) tự gắn `money_touch` để chắc chắn không bị tự-vá.
+
+Thước: `node test/observe.js` (23 bài, không chạm mạng). Nghiệm bằng **9 phép đục, đỏ 9/9**.
+
+## v0.5 — 🔒 Cái chốt canh ống lỗi (`kiem-ong-loi`)
+
+Ống lỗi là thứ **chỉ chạy khi web đã hỏng**. Gỡ nó ra thì trang vẫn đẹp, mọi test vẫn xanh, chỉ có
+hộp lỗi SugaHub im lặng — mà im lặng thì **không ai đi báo**. Nên nó phải có thước canh.
+
+```jsonc
+// package.json của site
+"test:ong-loi": "kiem-ong-loi server.js"
+```
+rồi **nối vào cổng** (`npm test` / `npm run build`) — thước không được cổng gọi là thước chết.
+
+Đo 6 thứ: ① lối vào `./observe` nạp được (ghim tag sai là lòi ra) · ② ống lỗi **chạy thật**: bắn
+đúng 1 lượt và vẫn `next(err)` · ③ server có tạo observer và `slug` **khác rỗng** (slug rỗng ⇒
+SugaHub không biết lỗi của web nào) · ④ có `app.use(...expressError())` · ⑤ lấy từ **gói chung**,
+không phải bản chép tay · ⑥ `lib/observe.*` **không mọc lại**.
+
+> Cái chốt nằm ở kho CHUNG, không chép vào từng site — vì nó vốn sinh ra để chữa đúng bệnh
+> "chép tay 4 bản giống hệt". Chép nó đi 4 lần là tự dẫm lại vết cũ.
+
+Thước của chính cái chốt: `node test/kiem-ong-loi.js` — dựng **repo giả** trong thư mục tạm rồi
+chạy cái chốt như CI chạy, đòi đỏ đúng 7 kiểu phá và xanh khi repo lành (9 bài).
 
 ## v0.3 — 🕳️ "Cấu hình vắng mặt phải ngã về KHOÁ"
 
