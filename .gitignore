@@ -6,3 +6,6 @@ node_modules/
 
 # Claude Code (KHÔNG đẩy lên Git)
 CLAUDE.md
+
+# output tool con-mat (tạm, không deploy)
+con-mat-report/
