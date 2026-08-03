@@ -30,6 +30,17 @@
 
 const DEFAULT_INGEST_URL = 'https://sugahub.suga.vn/api/ingest/errors';
 const TIMEOUT_MS = 1500;
+const DEFAULT_CANARY_MS = 15 * 60 * 1000; // 15 phút
+
+// Đọc số NGUYÊN DƯƠNG từ ENV, cắt TRƯỚC `Number()` — vì `Number('')` là `0` chứ không phải
+// `NaN`, và số 0 đó đi thẳng vào `setInterval(cb, 0)` ⇒ bắn nhịp liên tục, ngập ống báo lỗi.
+// Rỗng/0/âm/không-phải-số → rơi về mặc định (không kêu to, canary không phải cấu hình bắt buộc).
+function soDuongTuEnv(raw, macDinh) {
+  if (raw === undefined) return macDinh;
+  const s = String(raw).trim();
+  const v = s === '' ? NaN : Number(s);
+  return Number.isFinite(v) && v > 0 ? v : macDinh;
+}
 
 // Route đụng tiền MẶC ĐỊNH → gắn money_touch để engine KHÔNG tự-vá. App truyền moneyRe riêng để phủ đúng nghiệp vụ.
 const DEFAULT_MONEY_RE =
@@ -69,7 +80,10 @@ function createObserver(config) {
       const errorType = e.name || 'Error';
       const route = normRoute(meta.route);
       const money = meta.moneyTouch != null ? !!meta.moneyTouch : moneyRe.test(route);
-      const fingerprint = (service + ':' + errorType + ':' + (route || '?')).slice(0, 300);
+      // meta.fingerprint: lối riêng cho startCanary() ép fingerprint cố định `heartbeat:<service>`
+      // (SugaHub khớp `/^(heartbeat|canary):/i` để CHỈ cập "ống còn thông", không đẻ vé lỗi). Site
+      // gọi reportError() bình thường không truyền field này ⇒ hành vi cũ giữ nguyên 100%.
+      const fingerprint = (meta.fingerprint || (service + ':' + errorType + ':' + (route || '?'))).slice(0, 300);
 
       const body = {
         fingerprint,
@@ -107,6 +121,49 @@ function createObserver(config) {
     }
   }
 
+  let canaryTimer = null;
+
+  /**
+   * startCanary() — NHỊP-TIM tự-giám-sát của chính ống gửi lỗi này.
+   *
+   * Định kỳ bắn 1 "lỗi giả" đi TRỌN ĐƯỜNG THẬT (qua đúng `reportError` → POST tới đầu nhận)
+   * với fingerprint CỐ ĐỊNH `heartbeat:<service>`. SugaHub khớp `/^(heartbeat|canary):/i` thì
+   * CHỈ cập "ống còn thông" — KHÔNG đẻ vé lỗi (xem SugaHub `src/app/api/ingest/errors/route.ts`
+   * ~dòng 140). Nhịp NGỪNG tới quá lâu = ống TẮC mà không ai biết (đã từng mù 12 ngày).
+   *
+   * DÙNG (server.js, sau khi tạo observer):
+   *   observe.startCanary();
+   *
+   * An toàn: 1 đồng hồ/observer (gọi lại vô hại, không chồng đồng hồ) · `unref()` để không giữ
+   * process sống · nhịp mặc định 15' đổi bằng `CANARY_INTERVAL_MS` (rỗng/0/âm ⇒ mặc định, KHÔNG
+   * bắn liên tục ngập ống) · tắt riêng: `CANARY_DISABLED=1` · tôn trọng công tắc chung
+   * `SUGAHUB_OBSERVE=0` · tự nuốt MỌI lỗi, không bao giờ ném ra.
+   */
+  function startCanary() {
+    try {
+      if (canaryTimer) return; // đã có đồng hồ — gọi lại là vô hại
+      if (env.CANARY_DISABLED === '1') return;
+      if (!enabled()) return; // công tắc chung SUGAHUB_OBSERVE=0 tắt luôn cả canary
+
+      const ms = soDuongTuEnv(env.CANARY_INTERVAL_MS, DEFAULT_CANARY_MS);
+      const ping = () => {
+        try {
+          reportError(new Error('canary: kiểm ống báo lỗi còn thông'), {
+            route: '/observe/canary',
+            moneyTouch: false,
+            fingerprint: 'heartbeat:' + service,
+          });
+        } catch (_e) {
+          /* nuốt — nhịp tim KHÔNG được tự gây lỗi */
+        }
+      };
+      canaryTimer = setInterval(ping, ms);
+      if (canaryTimer && typeof canaryTimer.unref === 'function') canaryTimer.unref();
+    } catch (_e) {
+      /* nuốt — startCanary KHÔNG bao giờ được ném ra */
+    }
+  }
+
   // Middleware BÁO LỖI cho Express — đặt NGAY TRƯỚC error-handler cuối.
   // Báo lỗi (fire-and-forget) rồi next(err) để handler cũ trả response. KHÔNG đổi hành vi hiện tại.
   function expressError() {
@@ -124,8 +181,10 @@ function createObserver(config) {
     };
   }
 
-  return { reportError, expressError };
+  return { reportError, expressError, startCanary };
 }
 
 // `normRoute` + `DEFAULT_MONEY_RE` xuất ra để ĐO ĐƯỢC (test/observe.js) — site không cần gọi.
-module.exports = { createObserver, normRoute, DEFAULT_MONEY_RE, DEFAULT_INGEST_URL, TIMEOUT_MS };
+module.exports = {
+  createObserver, normRoute, DEFAULT_MONEY_RE, DEFAULT_INGEST_URL, TIMEOUT_MS, DEFAULT_CANARY_MS,
+};
