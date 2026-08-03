@@ -12,7 +12,7 @@
  */
 
 const assert = require('assert');
-const { createObserver, normRoute, DEFAULT_INGEST_URL } = require('../src/observe');
+const { createObserver, normRoute, DEFAULT_INGEST_URL, DEFAULT_CANARY_MS } = require('../src/observe');
 
 let pass = 0; let fail = 0;
 function test(name, fn) {
@@ -32,6 +32,19 @@ function ghiLai(fn, { fetchNem = false } = {}) {
   };
   try { fn(luot); } finally { globalThis.fetch = that; }
   return luot;
+}
+
+// Máy ghi thay cho `setInterval` thật — canary không được lập đồng hồ THẬT trong lúc test (treo
+// máy chạy test / bắn nhịp thật ra mạng). Trả về mảng {ms, cb}; cb gọi tay để "bấm" 1 nhịp.
+function ghiDongHo(fn) {
+  const luot = [];
+  const goc = global.setInterval;
+  global.setInterval = (cb, ms) => {
+    const gia = { unref() {} };
+    luot.push({ ms, cb, handle: gia });
+    return gia;
+  };
+  try { fn(luot); } finally { global.setInterval = goc; }
 }
 
 // Đổi biến môi trường trong đúng 1 bài rồi trả lại nguyên trạng.
@@ -293,6 +306,110 @@ test('Mặc định: severity `orange` (CHỈ-BẮT, engine không tự-vá)', (
     createObserver({ slug: 'a', service: 'b' }).reportError(new Error('e'), { route: '/a' });
     assert.strictEqual(l[0].body.severity, 'orange');
     assert.strictEqual(l[0].body.category, 'exception');
+  });
+});
+
+// --- NHỊP TIM (startCanary) — v0.6 --------------------------------------------
+// Ống lỗi CHỈ chạy khi web đã hỏng ⇒ tự nó im lặng suốt đời, hỏng cũng không ai biết.
+// Nhịp tim là 1 "lỗi giả" định kỳ đi TRỌN đường thật để chứng minh ống còn thông.
+
+test('startCanary: xuất từ createObserver()', () => {
+  const o = createObserver({ slug: 'a', service: 'b' });
+  assert.strictEqual(typeof o.startCanary, 'function');
+});
+
+test('startCanary: gọi 2 lần chỉ tạo 1 đồng hồ (không chồng đồng hồ)', () => {
+  ghiDongHo((luot) => {
+    const o = createObserver({ slug: 'a', service: 'canary-sv' });
+    o.startCanary();
+    o.startCanary();
+    assert.strictEqual(luot.length, 1, `gọi 2 lần mà tạo ${luot.length} đồng hồ`);
+  });
+});
+
+test('CANARY_INTERVAL_MS rỗng hoặc "0" → rơi về mặc định 15 phút (KHÔNG bắn liên tục)', () => {
+  ghiDongHo((luot) => {
+    voiEnv({ CANARY_INTERVAL_MS: '' }, () => {
+      createObserver({ slug: 'a', service: 'sv-rong' }).startCanary();
+    });
+    voiEnv({ CANARY_INTERVAL_MS: '0' }, () => {
+      createObserver({ slug: 'a', service: 'sv-khong' }).startCanary();
+    });
+    voiEnv({ CANARY_INTERVAL_MS: '-500' }, () => {
+      createObserver({ slug: 'a', service: 'sv-am' }).startCanary();
+    });
+    assert.strictEqual(luot.length, 3);
+    assert.strictEqual(luot[0].ms, DEFAULT_CANARY_MS, 'rỗng phải rơi về mặc định, không phải 0');
+    assert.strictEqual(luot[1].ms, DEFAULT_CANARY_MS, '"0" phải rơi về mặc định, không phải 0');
+    assert.strictEqual(luot[2].ms, DEFAULT_CANARY_MS, 'số âm phải rơi về mặc định');
+  });
+});
+
+test('CANARY_INTERVAL_MS hợp lệ (số dương) → dùng ĐÚNG giá trị đó (đối chứng dương)', () => {
+  ghiDongHo((luot) => {
+    voiEnv({ CANARY_INTERVAL_MS: '5000' }, () => {
+      createObserver({ slug: 'a', service: 'b' }).startCanary();
+    });
+    assert.strictEqual(luot[0].ms, 5000);
+  });
+});
+
+test('CANARY_DISABLED=1 → KHÔNG tạo đồng hồ nào (im hoàn toàn)', () => {
+  ghiDongHo((luot) => {
+    voiEnv({ CANARY_DISABLED: '1' }, () => {
+      createObserver({ slug: 'a', service: 'b' }).startCanary();
+    });
+    assert.strictEqual(luot.length, 0);
+  });
+});
+
+test('SUGAHUB_OBSERVE=0 (công tắc chung) → startCanary cũng im theo', () => {
+  ghiDongHo((luot) => {
+    voiEnv({ SUGAHUB_OBSERVE: '0' }, () => {
+      createObserver({ slug: 'a', service: 'b' }).startCanary();
+    });
+    assert.strictEqual(luot.length, 0);
+  });
+});
+
+test('Đồng hồ có unref() (không giữ process sống)', () => {
+  ghiDongHo((luot) => {
+    createObserver({ slug: 'a', service: 'b' }).startCanary();
+    assert.strictEqual(typeof luot[0].handle.unref, 'function');
+  });
+});
+
+test('Nhịp thật: fingerprint bắt đầu `heartbeat:`, đúng `heartbeat:<service>`, money_touch=false, route riêng', () => {
+  ghiDongHo((dongHo) => {
+    createObserver({ slug: 'a', service: 'canary-sv' }).startCanary();
+    assert.strictEqual(dongHo.length, 1);
+    ghiLai((l) => {
+      dongHo[0].cb(); // tự tay bấm 1 nhịp thay vì chờ 15 phút
+      assert.strictEqual(l.length, 1);
+      assert.match(l[0].body.fingerprint, /^heartbeat:/);
+      assert.strictEqual(l[0].body.fingerprint, 'heartbeat:canary-sv');
+      assert.strictEqual(l[0].body.money_touch, false);
+      assert.strictEqual(l[0].body.route, '/observe/canary');
+    });
+  });
+});
+
+test('startCanary tự nuốt lỗi: đồng hồ hệ thống hỏng vẫn KHÔNG ném', () => {
+  const goc = global.setInterval;
+  global.setInterval = () => { throw new Error('đồng hồ hỏng'); };
+  try {
+    assert.doesNotThrow(() => {
+      createObserver({ slug: 'a', service: 'b' }).startCanary();
+    });
+  } finally { global.setInterval = goc; }
+});
+
+test('Nhịp tim: mạng chết vẫn KHÔNG ném (giống hợp đồng reportError)', () => {
+  ghiDongHo((dongHo) => {
+    createObserver({ slug: 'a', service: 'b' }).startCanary();
+    ghiLai(() => {
+      assert.doesNotThrow(() => { dongHo[0].cb(); });
+    }, { fetchNem: true });
   });
 });
 
