@@ -21,11 +21,13 @@ marketing-ai · fidesholding-site · sugagroup-site · hidental-site) **và** `s
 
 | Bản | Ai đang ở đó |
 |---|---|
-| **v0.6.0** (03/08/2026) | chưa consumer nào bump — mới ra, chỉ THÊM `startCanary()` |
-| **v0.5.0** (01/08/2026) | 4 site Express dùng ống lỗi: hidental-site · fidesholding-site · sugagroup-site · santapocket-site |
-| **v0.3.0** (27/07/2026) | 5 nơi còn lại — **không cần vội bump**: v0.4/v0.5/v0.6 chỉ THÊM (`./observe` + lệnh `kiem-ong-loi` + `startCanary()`), không đổi một dòng nào của `./core` · `./express` · `./nextjs` |
+| **v0.7.0** (03/08/2026) | chưa consumer nào bump — **3 site đang bắn nhịp tim NÊN bump**: v0.6 bắn nhịp cả từ máy thợ ⇒ ống prod chết vẫn hiện xanh |
+| **v0.6.0** (03/08/2026) | fidesholding-site · sugagroup-site · santapocket-site (đã cắm `startCanary()`) |
+| **v0.5.0** (01/08/2026) | hidental-site |
+| **v0.3.0** (27/07/2026) | 5 nơi còn lại — **không cần vội bump**: v0.4→v0.7 chỉ đụng `./observe`, không đổi một dòng nào của `./core` · `./express` · `./nextjs` |
 
-*(v0.4.0 = ống lỗi; v0.5.0 = ống lỗi **+ cái chốt canh nó**; v0.6.0 = **+ nhịp tim tự-giám-sát**. Cắm mới thì lấy thẳng v0.6.0.)*
+*(v0.4.0 = ống lỗi; v0.5.0 = ống lỗi **+ cái chốt canh nó**; v0.6.0 = **+ nhịp tim tự-giám-sát**;
+v0.7.0 = **nhịp tim CHỈ bắn ở sân thật**. Cắm mới thì lấy thẳng v0.7.0.)*
 
 ### 🔁 Ra tag mới thì phải LAN sang consumer — gộp ở đây KHÔNG tự lan
 
@@ -134,7 +136,7 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
 | ⚡ Tốc độ | Nén brotli/gzip (zlib có sẵn, **không thêm thư viện**), Cache-Control theo path | ✅ |
 | 📮 Ống gửi lỗi | `createObserver()` — lỗi máy chủ tự bay về hộp lỗi SugaHub, bắn-rồi-quên, không chìa (v0.4) | ✅ |
 | 🔒 Chốt canh ống lỗi | Lệnh `kiem-ong-loi` — ai gỡ ống lỗi khỏi `server.js` là cổng ĐỎ (v0.5) | ✅ |
-| 💓 Nhịp tim ống lỗi | `startCanary()` — tự bắn "lỗi giả" định kỳ để CHỨNG MINH ống còn thông, không chỉ chờ có lỗi thật (v0.6) | ✅ |
+| 💓 Nhịp tim ống lỗi | `startCanary()` — tự bắn "lỗi giả" định kỳ để CHỨNG MINH ống còn thông, không chỉ chờ có lỗi thật (v0.6); **CHỈ bắn ở sân thật** (v0.7) | ✅ |
 
 ### Ghi chú gói Tốc độ
 - **Nén**: tự động cho nội dung văn bản (HTML/CSS/JS/JSON/SVG) ≥ 1KB. Giảm ~**70–85%** dung lượng
@@ -179,6 +181,46 @@ ENV đè được cấu hình code (Railway đổi khỏi sửa code): `SUGAHUB_
 
 Thước: `node test/observe.js` (33 bài, không chạm mạng). Nghiệm bằng **9 phép đục, đỏ 9/9**.
 
+## v0.7 — ⛔ Nhịp tim CHỈ bắn ở SÂN THẬT
+
+**Nhịp tim nói dối còn tệ hơn không có nhịp tim.** v0.6 bắn nhịp ở mọi nơi: một người chạy
+`node server.js` trên máy mình là SugaHub thấy "ống còn thông" — trong khi ống của **production**
+có thể đã tắc từ hôm qua. Đèn xanh giả kiểu này nguy hơn không đèn, vì nó làm người ta **thôi đi
+kiểm**.
+
+Chốt tưởng dễ (`NODE_ENV === 'production'`, y như bản Next `@suga-co/observe-web`) — **và đó là
+cái bẫy**. Đo thật ngày 03/08/2026 bằng `railway variables`:
+
+| Service (Railway, môi trường production) | `NODE_ENV` | `RAILWAY_ENVIRONMENT_NAME` |
+|---|---|---|
+| fidesholding-site | ❌ **không có** | `production` |
+| sugagroup-site | ❌ **không có** | `production` |
+| santapocket-site | ❌ **không có** | `production` |
+
+Bản Next hỏi `NODE_ENV` được vì **Next tự đặt** biến đó (`next dev`=development ·
+`next start`=production). Site Express thì **không ai đặt** ⇒ chép nguyên chốt đó sang đây là
+**tắt nhịp tim của cả 3 site thật**, rồi hộp lỗi báo "ống tắc" oan. Nên `laSanThat()` tin
+**dấu do NỀN TẢNG tự đóng** trước, `NODE_ENV` chỉ là lối phụ:
+
+| Hỏi theo thứ tự | Kết luận |
+|---|---|
+| `CANARY_FORCE=1` | ✅ sân thật (lối ép chạy để thử tay) |
+| `NODE_ENV=production` | ✅ sân thật |
+| `RAILWAY_ENVIRONMENT_NAME` / `RAILWAY_ENVIRONMENT` / `VERCEL_ENV` **có giá trị** | nghe theo nó, và CHỈ nó: `production`/`prod` ✅ · `staging`/`preview`/… ❌ (nhịp từ sân nháp cũng nhuộm xanh ống prod) |
+| có `RAILWAY_SERVICE_ID` / `RENDER` / `FLY_APP_NAME` / `DYNO` / `K_SERVICE` | ✅ sân thật (nền tảng không khai tên môi trường) |
+| không dấu nào | ❌ máy cá nhân → **im** |
+
+Kèm 2 chốt nữa cho khớp bản Next, cùng một họ "đừng để cái canh ống tự phá ống":
+
+| Chốt | Vì sao |
+|---|---|
+| **Sàn cứng 60s** | gõ nhầm `CANARY_INTERVAL_MS=100` là nện đầu nhận 10 lần/giây — v0.6 mới chặn được 0/âm/rỗng |
+| **Nhịp sớm 30s** | chỉ có `setInterval` thì nhịp đầu tới sau 15' ⇒ **15 phút đầu sau MỌI lần deploy đều hiện "ống tắc"** (đèn đỏ nói dối). Tiện thể: deploy xong 30 giây là biết ống còn thông hay không |
+
+Thước: `node test/observe.js` (43 bài). Nghiệm bằng **4 phép đục** — bỏ chốt sân thật · **chép
+nguyên chốt `NODE_ENV` của bản Next** · bỏ sàn 60s · bỏ nhịp sớm — **đỏ 4/4**. Phép đục thứ hai
+là phép quan trọng nhất: nó khoá đúng ca 3 site Railway ở bảng trên.
+
 ## v0.6 — 💓 Nhịp tim tự-giám-sát (`startCanary`)
 
 Ống lỗi CHỈ chạy khi web đã hỏng ⇒ nó im lặng suốt đời, hỏng cũng chẳng ai biết cho tới khi mù
@@ -197,13 +239,14 @@ observe.startCanary();   // gọi 1 lần sau khi tạo observer — KHÔNG cầ
 | **Fingerprint cố định** | `heartbeat:<service>` — SugaHub khớp `/^(heartbeat\|canary):/i` thì CHỈ cập "ống còn thông", KHÔNG đẻ vé lỗi |
 | **1 đồng hồ/observer** | gọi `startCanary()` nhiều lần vô hại, không chồng đồng hồ |
 | **`unref()`** | đồng hồ không giữ tiến trình sống |
-| **Nhịp mặc định 15'** | đổi bằng `CANARY_INTERVAL_MS`; rỗng/0/âm ⇒ rơi về mặc định — **không** bắn liên tục (bẫy `Number('')===0` ngập ống) |
+| **Nhịp mặc định 15'** | đổi bằng `CANARY_INTERVAL_MS`; rỗng/0/âm ⇒ rơi về mặc định — **không** bắn liên tục (bẫy `Number('')===0` ngập ống). **v0.7 thêm sàn cứng 60s** |
 | **Tắt riêng** | `CANARY_DISABLED=1`; canary cũng tôn trọng công tắc chung `SUGAHUB_OBSERVE=0` |
 | **Tự nuốt lỗi** | như mọi phần khác của ống lỗi — không bao giờ ném ra |
+| **Chỉ ở sân thật** (v0.7) | máy thợ KHÔNG bắn nhịp — xem mục v0.7 ở trên |
 
-Thước: `node test/observe.js` (chung file với v0.4, 10 bài canary trong tổng 33). Nghiệm bằng
-**5 phép đục** nhắm đúng 5 luật trên (đồng hồ chồng · nhịp 0/rỗng · `CANARY_DISABLED` ·
-`SUGAHUB_OBSERVE=0` · thiếu tiền tố `heartbeat:`) — đỏ đúng 5/5, không lệch bài.
+Thước: `node test/observe.js` (chung file với v0.4). Nghiệm bằng **5 phép đục** nhắm đúng 5 luật
+trên (đồng hồ chồng · nhịp 0/rỗng · `CANARY_DISABLED` · `SUGAHUB_OBSERVE=0` · thiếu tiền tố
+`heartbeat:`) — đỏ đúng 5/5, không lệch bài.
 
 ## v0.5 — 🔒 Cái chốt canh ống lỗi (`kiem-ong-loi`)
 
