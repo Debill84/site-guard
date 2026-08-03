@@ -31,6 +31,46 @@
 const DEFAULT_INGEST_URL = 'https://sugahub.suga.vn/api/ingest/errors';
 const TIMEOUT_MS = 1500;
 const DEFAULT_CANARY_MS = 15 * 60 * 1000; // 15 phút
+// Sàn CỨNG: gõ nhầm `CANARY_INTERVAL_MS=100` cũng không được phép nện đầu nhận 10 lần/giây.
+const MIN_CANARY_MS = 60 * 1000;
+// Nhịp SỚM sau khi tiến trình ổn định. Chỉ có `setInterval` thì nhịp đầu tới sau 15' ⇒ 15 phút
+// đầu đời của MỌI lần deploy đều hiện "ống tắc" (đèn ĐỎ nói dối). 30s cũng để deploy xong là
+// biết ngay ống còn thông hay không, khỏi ngồi chờ.
+const CANARY_WARMUP_MS = 30 * 1000;
+
+// --- SÂN THẬT hay MÁY THỢ? -----------------------------------------------------------------
+// 🩸 Vì sao KHÔNG chỉ hỏi `NODE_ENV === 'production'` như bản Next `@suga-co/observe-web`:
+//    Next TỰ đặt `NODE_ENV` (`next dev`=development · `next start`=production) nên ở đó hỏi vậy
+//    là chắc. Site Express thì **không ai đặt** — đo thật 03/08/2026 bằng `railway variables`:
+//    fidesholding-site · sugagroup-site · santapocket-site trên Railway **production KHÔNG HỀ CÓ
+//    `NODE_ENV`**. Chép nguyên chốt của bản Next sang đây là giết nhịp tim của cả 3 site thật.
+//    (Cùng họ với bài học đã trả giá: nhãn môi trường NGƯỜI GÕ ĐƯỢC thì có ngày gõ sai/gõ thiếu.)
+// ⇒ Tin **dấu do NỀN TẢNG tự đóng** trước, `NODE_ENV` chỉ là lối phụ.
+const DAU_MOI_TRUONG = ['RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_ENVIRONMENT', 'VERCEL_ENV'];
+const DAU_CO_MAT = ['RAILWAY_SERVICE_ID', 'RENDER', 'FLY_APP_NAME', 'DYNO', 'K_SERVICE'];
+
+/**
+ * Có đang chạy trên SÂN THẬT không? (quyết định DUY NHẤT cho việc bắn nhịp tim)
+ * Thứ tự hỏi — dừng ở dấu ĐẦU TIÊN nói được:
+ *   1. `CANARY_FORCE=1` → ép chạy (thử tay/diễn tập).
+ *   2. `NODE_ENV=production` → chắc chắn thật.
+ *   3. Nền tảng CÓ khai tên môi trường → nghe theo nó, và CHỈ nó: tên khác `production`/`prod`
+ *      (staging, preview, pr-123…) là KHÔNG bắn — nhịp từ sân nháp làm ống prod chết vẫn hiện
+ *      xanh, y hệt nhịp từ máy thợ.
+ *   4. Nền tảng không khai tên nhưng có dấu CÓ MẶT (Render/Fly/Heroku/Cloud Run) → coi là thật.
+ *   5. Không dấu nào ⇒ máy cá nhân → im.
+ */
+function laSanThat(env) {
+  env = env || {};
+  if (String(env.CANARY_FORCE || '').trim() === '1') return true;
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production') return true;
+  for (const ten of DAU_MOI_TRUONG) {
+    const v = String(env[ten] || '').trim().toLowerCase();
+    if (v) return v === 'production' || v === 'prod';
+  }
+  for (const ten of DAU_CO_MAT) if (String(env[ten] || '').trim()) return true;
+  return false;
+}
 
 // Đọc số NGUYÊN DƯƠNG từ ENV, cắt TRƯỚC `Number()` — vì `Number('')` là `0` chứ không phải
 // `NaN`, và số 0 đó đi thẳng vào `setInterval(cb, 0)` ⇒ bắn nhịp liên tục, ngập ống báo lỗi.
@@ -134,18 +174,24 @@ function createObserver(config) {
    * DÙNG (server.js, sau khi tạo observer):
    *   observe.startCanary();
    *
+   * ⛔ CHỈ BẮN Ở SÂN THẬT (v0.7): máy thợ chạy `node server.js` mà cũng bắn nhịp thì ống
+   * production chết vẫn hiện XANH — **nhịp tim nói dối còn tệ hơn không có nhịp tim**. Cách
+   * nhận sân thật xem `laSanThat()` ở đầu tệp (KHÔNG chỉ dựa `NODE_ENV` — 3 site Express thật
+   * trên Railway không hề có biến đó). Ép chạy để thử tay: `CANARY_FORCE=1`.
+   *
    * An toàn: 1 đồng hồ/observer (gọi lại vô hại, không chồng đồng hồ) · `unref()` để không giữ
    * process sống · nhịp mặc định 15' đổi bằng `CANARY_INTERVAL_MS` (rỗng/0/âm ⇒ mặc định, KHÔNG
-   * bắn liên tục ngập ống) · tắt riêng: `CANARY_DISABLED=1` · tôn trọng công tắc chung
-   * `SUGAHUB_OBSERVE=0` · tự nuốt MỌI lỗi, không bao giờ ném ra.
+   * bắn liên tục ngập ống; sàn cứng 60s) · nhịp đầu sau 30s để deploy xong biết ngay · tắt
+   * riêng: `CANARY_DISABLED=1` · tôn trọng công tắc chung `SUGAHUB_OBSERVE=0` · tự nuốt MỌI lỗi.
    */
   function startCanary() {
     try {
       if (canaryTimer) return; // đã có đồng hồ — gọi lại là vô hại
       if (env.CANARY_DISABLED === '1') return;
       if (!enabled()) return; // công tắc chung SUGAHUB_OBSERVE=0 tắt luôn cả canary
+      if (!laSanThat(process.env)) return; // máy thợ → im, đừng nhuộm xanh ống prod
 
-      const ms = soDuongTuEnv(env.CANARY_INTERVAL_MS, DEFAULT_CANARY_MS);
+      const ms = Math.max(MIN_CANARY_MS, soDuongTuEnv(env.CANARY_INTERVAL_MS, DEFAULT_CANARY_MS));
       const ping = () => {
         try {
           reportError(new Error('canary: kiểm ống báo lỗi còn thông'), {
@@ -157,6 +203,9 @@ function createObserver(config) {
           /* nuốt — nhịp tim KHÔNG được tự gây lỗi */
         }
       };
+      // Nhịp SỚM: khỏi để 15 phút đầu sau mỗi lần deploy hiện "ống tắc" oan.
+      const somTimer = setTimeout(ping, CANARY_WARMUP_MS);
+      if (somTimer && typeof somTimer.unref === 'function') somTimer.unref();
       canaryTimer = setInterval(ping, ms);
       if (canaryTimer && typeof canaryTimer.unref === 'function') canaryTimer.unref();
     } catch (_e) {
@@ -184,7 +233,9 @@ function createObserver(config) {
   return { reportError, expressError, startCanary };
 }
 
-// `normRoute` + `DEFAULT_MONEY_RE` xuất ra để ĐO ĐƯỢC (test/observe.js) — site không cần gọi.
+// `normRoute` + `DEFAULT_MONEY_RE` + `laSanThat` xuất ra để ĐO ĐƯỢC (test/observe.js) — site không cần gọi.
 module.exports = {
-  createObserver, normRoute, DEFAULT_MONEY_RE, DEFAULT_INGEST_URL, TIMEOUT_MS, DEFAULT_CANARY_MS,
+  createObserver, normRoute, laSanThat,
+  DEFAULT_MONEY_RE, DEFAULT_INGEST_URL, TIMEOUT_MS,
+  DEFAULT_CANARY_MS, MIN_CANARY_MS, CANARY_WARMUP_MS,
 };
