@@ -21,10 +21,11 @@ marketing-ai · fidesholding-site · sugagroup-site · hidental-site) **và** `s
 
 | Bản | Ai đang ở đó |
 |---|---|
+| **v0.6.0** (03/08/2026) | chưa consumer nào bump — mới ra, chỉ THÊM `startCanary()` |
 | **v0.5.0** (01/08/2026) | 4 site Express dùng ống lỗi: hidental-site · fidesholding-site · sugagroup-site · santapocket-site |
-| **v0.3.0** (27/07/2026) | 5 nơi còn lại — **không cần vội bump**: v0.4/v0.5 chỉ THÊM (`./observe` + lệnh `kiem-ong-loi`), không đổi một dòng nào của `./core` · `./express` · `./nextjs` |
+| **v0.3.0** (27/07/2026) | 5 nơi còn lại — **không cần vội bump**: v0.4/v0.5/v0.6 chỉ THÊM (`./observe` + lệnh `kiem-ong-loi` + `startCanary()`), không đổi một dòng nào của `./core` · `./express` · `./nextjs` |
 
-*(v0.4.0 = ống lỗi; v0.5.0 = ống lỗi **+ cái chốt canh nó**. Cắm mới thì lấy thẳng v0.5.0.)*
+*(v0.4.0 = ống lỗi; v0.5.0 = ống lỗi **+ cái chốt canh nó**; v0.6.0 = **+ nhịp tim tự-giám-sát**. Cắm mới thì lấy thẳng v0.6.0.)*
 
 ### 🔁 Ra tag mới thì phải LAN sang consumer — gộp ở đây KHÔNG tự lan
 
@@ -133,6 +134,7 @@ export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)
 | ⚡ Tốc độ | Nén brotli/gzip (zlib có sẵn, **không thêm thư viện**), Cache-Control theo path | ✅ |
 | 📮 Ống gửi lỗi | `createObserver()` — lỗi máy chủ tự bay về hộp lỗi SugaHub, bắn-rồi-quên, không chìa (v0.4) | ✅ |
 | 🔒 Chốt canh ống lỗi | Lệnh `kiem-ong-loi` — ai gỡ ống lỗi khỏi `server.js` là cổng ĐỎ (v0.5) | ✅ |
+| 💓 Nhịp tim ống lỗi | `startCanary()` — tự bắn "lỗi giả" định kỳ để CHỨNG MINH ống còn thông, không chỉ chờ có lỗi thật (v0.6) | ✅ |
 
 ### Ghi chú gói Tốc độ
 - **Nén**: tự động cho nội dung văn bản (HTML/CSS/JS/JSON/SVG) ≥ 1KB. Giảm ~**70–85%** dung lượng
@@ -175,7 +177,33 @@ ENV đè được cấu hình code (Railway đổi khỏi sửa code): `SUGAHUB_
 > Mặc định severity `orange` = **CHỈ-BẮT**, engine SugaHub KHÔNG tự-vá. Route đụng tiền
 > (`thanh-toan`, `checkout`, `invoice`…) tự gắn `money_touch` để chắc chắn không bị tự-vá.
 
-Thước: `node test/observe.js` (23 bài, không chạm mạng). Nghiệm bằng **9 phép đục, đỏ 9/9**.
+Thước: `node test/observe.js` (33 bài, không chạm mạng). Nghiệm bằng **9 phép đục, đỏ 9/9**.
+
+## v0.6 — 💓 Nhịp tim tự-giám-sát (`startCanary`)
+
+Ống lỗi CHỈ chạy khi web đã hỏng ⇒ nó im lặng suốt đời, hỏng cũng chẳng ai biết cho tới khi mù
+hàng chục ngày (đúng bệnh đã đo được: **19/20 dự án SugaHub 0 nhịp tim ống lỗi**). Nhịp tim là
+1 "lỗi giả" định kỳ đi TRỌN đường thật để tự chứng minh ống còn thông.
+
+```js
+const observe = createObserver({ slug: 'hidental-site', service: 'hidental-web' });
+app.use(observe.expressError());
+observe.startCanary();   // gọi 1 lần sau khi tạo observer — KHÔNG cần gọi trong request nào
+```
+
+| Luật | Nghĩa |
+|---|---|
+| **Đi đường thật** | qua đúng `reportError()` → cùng POST/timeout/retry-null như lỗi thật, không phải đường tắt |
+| **Fingerprint cố định** | `heartbeat:<service>` — SugaHub khớp `/^(heartbeat\|canary):/i` thì CHỈ cập "ống còn thông", KHÔNG đẻ vé lỗi |
+| **1 đồng hồ/observer** | gọi `startCanary()` nhiều lần vô hại, không chồng đồng hồ |
+| **`unref()`** | đồng hồ không giữ tiến trình sống |
+| **Nhịp mặc định 15'** | đổi bằng `CANARY_INTERVAL_MS`; rỗng/0/âm ⇒ rơi về mặc định — **không** bắn liên tục (bẫy `Number('')===0` ngập ống) |
+| **Tắt riêng** | `CANARY_DISABLED=1`; canary cũng tôn trọng công tắc chung `SUGAHUB_OBSERVE=0` |
+| **Tự nuốt lỗi** | như mọi phần khác của ống lỗi — không bao giờ ném ra |
+
+Thước: `node test/observe.js` (chung file với v0.4, 10 bài canary trong tổng 33). Nghiệm bằng
+**5 phép đục** nhắm đúng 5 luật trên (đồng hồ chồng · nhịp 0/rỗng · `CANARY_DISABLED` ·
+`SUGAHUB_OBSERVE=0` · thiếu tiền tố `heartbeat:`) — đỏ đúng 5/5, không lệch bài.
 
 ## v0.5 — 🔒 Cái chốt canh ống lỗi (`kiem-ong-loi`)
 
