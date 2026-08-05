@@ -33,6 +33,11 @@ function defaultConfig() {
         permissionsPolicy: 'camera=(), microphone=(), geolocation=()',
         // Content-Security-Policy: MẶC ĐỊNH TẮT (dễ vỡ site). Đặt chuỗi để bật.
         contentSecurityPolicy: false,
+        // 🧪 Bản CHỈ-BÁO-CÁO: trình duyệt đo rồi mách, KHÔNG chặn gì ⇒ bật là không vỡ trang.
+        // Đường vào ĐÚNG cho CSP: bật cái này trước, đọc báo cáo vài ngày, siết dần, rồi mới đổi
+        // sang `contentSecurityPolicy`. Bật thẳng bản chặn trên site đang chạy là trắng trang —
+        // đo 05/08/2026: site của nhà còn 6–20 script nội tuyến + hàng chục thẻ `<style>` mỗi trang.
+        contentSecurityPolicyReportOnly: false,
         // Cách ly cross-origin (chặt) — tắt mặc định để không vỡ embed bên thứ 3
         crossOriginOpenerPolicy: false, // vd 'same-origin'
         crossOriginResourcePolicy: false, // vd 'same-origin'
