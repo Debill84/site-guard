@@ -32,8 +32,34 @@ const THE_CHO = new Set([
   'ul', 'ol', 'li', 'a', 'span', 'blockquote', 'code', 'pre',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
 ]);
+
+// 📰 NỚI RIÊNG CHO **THÂN BÀI VIẾT** (chế độ `baiViet`, 05/08/2026 — xem `locHtmlBaiViet` cuối tệp).
+//
+// 🩸 Vì sao phải có chế độ thứ hai: đo bài thật trên `nhonho.vn` ngày 05/08 — thân bài là markup
+// **Elementor** di trú từ site cũ, một bài có `img` x18 + `div` x58. Đẩy nguyên khối đó qua danh
+// sách hẹp ở trên là **XOÁ SẠCH ẢNH VÀ KHUNG BÀI** — vá xong thì bài viết trắng trơn, hỏng câm mà
+// không ai báo. Đúng cái luật đã trả giá: **cắt nhầm = mất chữ**, nguy hiểm ngang chỗ thủng.
+// ⚠️ Chỉ dùng cho THÂN BÀI. Tiêu đề/tên hàng/tóm tắt vẫn đi bản hẹp — mấy ô đó không đời nào cần
+// `<div>` lẫn `<img>`, nới ra là tự mở cửa không lý do.
+const THE_CHO_BAI = new Set([
+  'div', 'img', 'figure', 'figcaption', 'picture',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'col', 'colgroup',
+  'dl', 'dt', 'dd', 'section', 'article', 'header', 'footer', 'main', 'aside', 'nav',
+]);
+
+// Lớp CSS giữ theo **HỌ TÊN**, không giữ bừa. Bỏ `class` hẳn thì bài Elementor mất khung; giữ bừa
+// thì kẻ ghi được vào kho mượn luôn lớp tiện ích của chính site (Tailwind: `fixed inset-0 z-50`)
+// dựng tấm phủ kín màn đè lên nút thật — không cần chạy một dòng mã nào. Mấy họ dưới đây là của
+// site cũ/WordPress, KHÔNG trùng họ tiện ích của site mới ⇒ giữ được khung mà không mượn được gì.
+const RE_LOP_CHO = /^(elementor|e|wp|has|is|align|gallery|size|attachment)([-_]|$)/i;
+
+// Thuộc tính ảnh giữ thêm (ngoài `src` đã lọc riêng). Cố ý BỎ `srcset`: nó chứa NHIỀU đường link
+// ngăn bằng dấu phẩy, lọc đúng phải tách từng cái — nội dung đo được 05/08 không dùng tới, nên bỏ
+// cho gọn còn hơn lọc nửa vời. Cũng bỏ mọi `data-*` (móc chạy của Elementor, site mới không nạp).
+const ATT_ANH = new Set(['alt', 'title', 'width', 'height', 'loading', 'decoding']);
+
 // Thẻ RỖNG (không có thẻ đóng) — đừng đẩy vào chồng chờ đóng.
-const THE_RONG = new Set(['br', 'hr']);
+const THE_RONG = new Set(['br', 'hr', 'img', 'col']);
 
 // Mấy thẻ này phải NUỐT CẢ RUỘT: bỏ mỗi cái thẻ thì phần chữ bên trong (mã JS, mã CSS) rơi ra
 // thành chữ hiện trên màn — vừa xấu vừa lộ. `<title>`/`<textarea>` nằm đây vì trình duyệt đọc
@@ -82,7 +108,7 @@ function locStyle(v) {
 // (onerror/onload/onmouseover/…) mà không cần biết tên chúng — kể cả thứ trình duyệt mới đẻ ra.
 // Cũng cố ý bỏ `id`/`name`: một `<div id="editform">` gài vào là **đè** lên phần tử thật, làm mạch
 // xem-trước của `admin-ui.js` trỏ nhầm chỗ (kiểu phá DOM clobbering, không cần chạy mã nào).
-function dungTheMo(ten, phan) {
+function dungTheMo(ten, phan, bai) {
   const giu = [];
   let m;
   RE_TT.lastIndex = 0;
@@ -92,6 +118,16 @@ function dungTheMo(ten, phan) {
     if (tt === 'style') {
       const s = locStyle(gt);
       if (s) giu.push(['style', s]);
+    } else if (bai && tt === 'class') {
+      // Giữ theo TỪNG lớp một, không giữ cả cụm: một cụm lành lẫn một lớp mượn của site là lọt.
+      const lop = String(gt).split(/\s+/).filter((c) => c && RE_LOP_CHO.test(c));
+      if (lop.length) giu.push(['class', lop.join(' ')]);
+    } else if (bai && ten === 'img' && tt === 'src') {
+      // `src` của ảnh cũng là ĐƯỜNG LINK — `hrefAnToan` chặn `javascript:`/`data:` (kể cả bản nguỵ
+      // trang). Ảnh hỏng thì mất một tấm ảnh; ảnh `data:text/html` thì mất cả trang.
+      if (hrefAnToan(gt)) giu.push(['src', gt]);
+    } else if (bai && ten === 'img' && ATT_ANH.has(tt)) {
+      giu.push([tt, gt]);
     } else if (ten === 'a' && tt === 'href') {
       if (hrefAnToan(gt)) giu.push(['href', gt]);
     } else if (ten === 'a' && tt === 'target' && gt === '_blank') {
@@ -107,9 +143,12 @@ function dungTheMo(ten, phan) {
 /**
  * Lọc một mẩu HTML còn lại đúng phần chữ + định dạng an toàn.
  * @param {*} html chuỗi HTML lấy từ kho (có thể là bất cứ thứ gì)
+ * @param {{baiViet?: boolean}} [tuyChon] `baiViet: true` = nới cho THÂN BÀI (giữ ảnh + khung
+ *        + lớp CSS của WordPress/Elementor). Mặc định là bản HẸP — dùng cho tiêu đề/tên/tóm tắt.
  * @returns {string} HTML đã lọc, cắm thẳng vào trang được
  */
-function locHtml(html) {
+function locHtml(html, tuyChon) {
+  const bai = !!(tuyChon && tuyChon.baiViet);
   let s = String(html == null ? '' : html);
 
   // Nuốt cả ruột — chạy lặp vì trò lồng nhau `<scr<script>ipt>` cần vài lượt mới rụng hết.
@@ -135,14 +174,14 @@ function locHtml(html) {
     if (!t) continue;                       // `< div`, `<3`… không phải thẻ → bỏ
     const dong = t[1] === '/';
     const ten = t[2].toLowerCase();
-    if (!THE_CHO.has(ten)) continue;        // ngoài danh sách → bỏ THẺ, giữ chữ bên trong
+    if (!THE_CHO.has(ten) && !(bai && THE_CHO_BAI.has(ten))) continue; // ngoài ds → bỏ THẺ, giữ chữ
     if (dong) {
       // Thẻ đóng lạc loài (không có thẻ mở tương ứng) → bỏ, kẻo nó đóng nhầm khối của trang admin.
       const k = chong.lastIndexOf(ten);
       if (k < 0) continue;
       while (chong.length > k) ra += `</${chong.pop()}>`;
     } else {
-      ra += dungTheMo(ten, t[3].replace(/\/?>$/, ''));
+      ra += dungTheMo(ten, t[3].replace(/\/?>$/, ''), bai);
       if (!THE_RONG.has(ten)) chong.push(ten);
     }
   }
@@ -152,4 +191,14 @@ function locHtml(html) {
   return ra;
 }
 
-module.exports = { locHtml, hrefAnToan };
+/**
+ * Lọc **THÂN BÀI VIẾT** — giữ ảnh, khung và lớp CSS của WordPress/Elementor, vẫn cắt mã.
+ * Đọc rõ hơn ở chỗ gọi so với `locHtml(x, { baiViet: true })`.
+ * @param {*} html thân bài lấy từ kho
+ * @returns {string} HTML đã lọc
+ */
+function locHtmlBaiViet(html) {
+  return locHtml(html, { baiViet: true });
+}
+
+module.exports = { locHtml, locHtmlBaiViet, hrefAnToan };
