@@ -84,13 +84,18 @@ ok('lược đồ link: chặn data:/vbscript:, cho qua neo #');
 // mà xoá là mọi site bên ngoài gãy ngay lúc `require`. Vì vậy phải canh riêng khai báo, và canh cả
 // `files:` (không có `src` thì gói xuất ra thiếu tệp, chỉ vỡ khi cài từ xa — muộn nhất có thể).
 const pkg = require('../package.json');
-assert.strictEqual(pkg.exports['./loc-html'], './src/core/loc-html.js',
+const cua = pkg.exports['./loc-html'];
+assert.strictEqual(cua && cua.default, './src/core/loc-html.js',
   '❌ MẤT khai báo cửa xuất `./loc-html` — site ngoài sẽ gãy lúc nạp, bài kiểm nội bộ KHÔNG thấy');
+// Khai KIỂU phải còn: site viết TypeScript bật `strict` mà thiếu `.d.ts` là `next build` ĐỎ, rồi
+// mỗi repo lại tự chế một tệp khai riêng — đúng cái bệnh "mỗi nơi vá một nửa" gói này sinh ra để dẹp.
+assert.strictEqual(cua.types, './src/core/loc-html.d.ts', '❌ MẤT khai kiểu — site TypeScript sẽ đỏ');
+assert.ok(require('fs').existsSync(path.join(__dirname, '..', cua.types)), '❌ khai kiểu trỏ vào tệp không có');
 assert.ok((pkg.files || []).includes('src'), '❌ `files:` thiếu `src` — gói xuất ra sẽ không có tệp lọc');
-ok('cửa xuất `@suga/site-guard/loc-html` còn khai + `files:` có `src`');
+ok('cửa xuất `@suga/site-guard/loc-html` còn khai (kèm khai kiểu) + `files:` có `src`');
 
 // Nạp đúng như site ngoài nạp — bắt lỗi cú pháp/đường dẫn mà đường tương đối che mất.
-const quaCua = require(path.join(__dirname, '..', pkg.exports['./loc-html']));
+const quaCua = require(path.join(__dirname, '..', cua.default));
 assert.strictEqual(typeof quaCua.locHtml, 'function', '❌ cửa xuất không trả về hàm `locHtml`');
 assert.strictEqual(typeof quaCua.hrefAnToan, 'function', '❌ cửa xuất không trả về hàm `hrefAnToan`');
 assert.strictEqual(quaCua.locHtml('<img src=x onerror=alert(1)>b'), 'b',
