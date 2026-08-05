@@ -1,6 +1,6 @@
 {
   "name": "@suga/site-guard",
-  "version": "0.8.0",
+  "version": "0.10.0",
   "description": "Module rời: bảo mật + chống crawl + tối ưu tốc độ + ống gửi lỗi, cắm vào mọi site Express & Next.js của SugaGroup",
   "private": true,
   "license": "UNLICENSED",
@@ -16,7 +16,10 @@
       "default": "./src/nextjs/index.js"
     },
     "./core": "./src/core/index.js",
-    "./loc-html": "./src/core/loc-html.js",
+    "./loc-html": {
+      "types": "./src/core/loc-html.d.ts",
+      "default": "./src/core/loc-html.js"
+    },
     "./observe": "./src/observe/index.js"
   },
   "files": [
