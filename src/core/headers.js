@@ -31,6 +31,15 @@ function buildSecurityHeaders(securityCfg, ctx = {}) {
 
   if (h.contentSecurityPolicy) headers['Content-Security-Policy'] = String(h.contentSecurityPolicy);
 
+  // 🧪 BẢN CHỈ-BÁO-CÁO: trình duyệt ĐO rồi mách, **KHÔNG chặn gì**. Đây là đường vào an toàn duy
+  // nhất cho CSP trên site đang chạy — bật thẳng bản chặn là trắng trang ngay. Đo 05/08/2026:
+  // fides có 6 script nội tuyến + 74 thẻ `<style>`, nhonho 20 script nội tuyến ⇒ luật nghiêm sẽ
+  // cắt sạch. Đặt được ĐỒNG THỜI với bản chặn (bản chặn giữ luật đang chạy, bản báo cáo thử luật
+  // chặt hơn) — đúng cách chuẩn để siết dần mà không đập vỡ trang.
+  if (h.contentSecurityPolicyReportOnly) {
+    headers['Content-Security-Policy-Report-Only'] = String(h.contentSecurityPolicyReportOnly);
+  }
+
   if (h.crossOriginOpenerPolicy) headers['Cross-Origin-Opener-Policy'] = String(h.crossOriginOpenerPolicy);
 
   if (h.crossOriginResourcePolicy) headers['Cross-Origin-Resource-Policy'] = String(h.crossOriginResourcePolicy);

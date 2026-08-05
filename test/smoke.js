@@ -39,6 +39,33 @@ test('CSP tắt mặc định, bật được qua config', () => {
   assert.strictEqual(on['Content-Security-Policy'], "default-src 'self'");
 });
 
+// 🧪 Bản CHỈ-BÁO-CÁO (05/08/2026) — đường vào an toàn cho CSP: trình duyệt đo rồi mách, KHÔNG chặn.
+// Đo các site của nhà hôm đó: 6–20 script nội tuyến + hàng chục thẻ `<style>` MỖI TRANG ⇒ bật thẳng
+// bản chặn là trắng trang. Phải bật báo-cáo trước, đọc vài ngày, siết dần, rồi mới đổi sang bản chặn.
+test('CSP chỉ-báo-cáo: tắt mặc định · bật riêng · sống chung được với bản chặn', () => {
+  const { resolveConfig } = require('../src/config');
+  const off = buildSecurityHeaders(resolveConfig().security, {});
+  assert.ok(!off['Content-Security-Policy-Report-Only'], 'bản báo cáo phải TẮT mặc định');
+
+  const chiBao = buildSecurityHeaders(
+    resolveConfig({ security: { headers: { contentSecurityPolicyReportOnly: "default-src 'self'" } } }).security, {}
+  );
+  assert.strictEqual(chiBao['Content-Security-Policy-Report-Only'], "default-src 'self'");
+  // Vế QUAN TRỌNG: bật báo-cáo KHÔNG được vô tình gửi kèm bản chặn — gửi nhầm là trắng trang thật.
+  assert.ok(!chiBao['Content-Security-Policy'],
+    '❌ bật bản BÁO CÁO mà lại gửi kèm bản CHẶN — site sẽ trắng trang, đúng thứ đang cố tránh');
+
+  // Hai bản sống chung được: bản chặn giữ luật đang chạy, bản báo cáo thử luật chặt hơn.
+  const caHai = buildSecurityHeaders(
+    resolveConfig({ security: { headers: {
+      contentSecurityPolicy: "default-src 'self' 'unsafe-inline'",
+      contentSecurityPolicyReportOnly: "default-src 'self'",
+    } } }).security, {}
+  );
+  assert.strictEqual(caHai['Content-Security-Policy'], "default-src 'self' 'unsafe-inline'");
+  assert.strictEqual(caHai['Content-Security-Policy-Report-Only'], "default-src 'self'");
+});
+
 // 2) Chặn bot
 test('Chặn bot xấu (curl), cho qua Googlebot, cho qua trình duyệt thật', () => {
   const g = createGuard();
