@@ -4,10 +4,11 @@
 //   ① `locHtml` cắt đúng phần nguy hiểm (mỗi mẩu dưới đây từng là một đường chạy mã thật);
 //   ② GIỮ ĐỦ định dạng thật — cắt nhầm là **mất chữ của khách**, hỏng câm không ai báo;
 //   ③ cửa xuất `@suga/site-guard/loc-html` còn khai trong `package.json` — mất khai là mọi site
-//      bên ngoài gãy ngay lúc nạp, mà bài kiểm nội bộ (nạp theo đường tương đối) vẫn xanh.
+//      bên ngoài gãy ngay lúc nạp, mà bài kiểm nội bộ (nạp theo đường tương đối) vẫn xanh;
+//   ④ chế độ THÂN BÀI (`baiViet`) nới đủ để không mất ảnh, mà không nới thành cửa sau.
 const assert = require('assert');
 const path = require('path');
-const { locHtml, hrefAnToan } = require('../src/core/loc-html.js');
+const { locHtml, locHtmlBaiViet, hrefAnToan } = require('../src/core/loc-html.js');
 
 let so = 0;
 const ok = (ten) => { so++; console.log('  ✓', ten); };
@@ -95,5 +96,50 @@ assert.strictEqual(typeof quaCua.hrefAnToan, 'function', '❌ cửa xuất khôn
 assert.strictEqual(quaCua.locHtml('<img src=x onerror=alert(1)>b'), 'b',
   '❌ hàm lấy qua cửa xuất KHÔNG lọc — hai đường nạp đang trỏ hai tệp khác nhau');
 ok('nạp qua cửa xuất ra đúng hàm, và hàm đó lọc thật');
+
+// ── ④ CHẾ ĐỘ THÂN BÀI (`baiViet`) — nới ĐỦ để không mất ảnh, KHÔNG nới thành cửa sau ──────────
+// 🩸 Vì sao có chế độ này: đo bài thật trên `nhonho.vn` 05/08/2026 — thân bài là markup Elementor
+// di trú, một bài `img` x18 + `div` x58. Lọc bằng bản HẸP là bài viết trắng trơn. Cắt nhầm cũng là
+// hỏng, ngang chỗ thủng — nên phải canh CẢ HAI VẾ ở đây.
+assert.strictEqual(locHtml('<div class="elementor-element"><img src="/a.jpg" alt="chai">chữ</div>'), 'chữ',
+  '❌ bản HẸP hết hẹp — `div`/`img` KHÔNG được lọt vào chế độ mặc định');
+ok('bản hẹp vẫn hẹp: div/img bị bỏ khi không bật baiViet');
+
+const BAI = '<div class="elementor-element elementor-element-0c58836 elementor-widget" data-id="0c58836">'
+  + '<img src="https://kho.example/anh.jpg" alt="Chai vang" title="Vang" loading="lazy" decoding="async" width="800" height="600">'
+  + '<p>Chữ trong bài</p></div>';
+const raBai = locHtmlBaiViet(BAI);
+assert.ok(/<img [^>]*src="https:\/\/kho\.example\/anh\.jpg"/.test(raBai), `❌ MẤT ẢNH trong thân bài: ${raBai}`);
+assert.ok(/alt="Chai vang"/.test(raBai) && /loading="lazy"/.test(raBai), '❌ mất alt/loading của ảnh');
+assert.ok(/<div class="elementor-element elementor-element-0c58836 elementor-widget"/.test(raBai),
+  `❌ mất khung/lớp Elementor — bài sẽ vỡ giao diện: ${raBai}`);
+assert.ok(!/data-id/.test(raBai), '❌ còn `data-*` — móc chạy của Elementor, site mới không dùng');
+assert.ok(/Chữ trong bài/.test(raBai), '❌ mất chữ trong thân bài');
+ok('thân bài: giữ ảnh + khung + lớp Elementor, bỏ data-*');
+
+for (const [ten, doc] of [
+  ['script trong thân bài', '<div><script>alert(1)</script>chào</div>'],
+  ['ảnh gọi onerror', '<div><img src=x onerror=alert(1)></div>'],
+  ['ảnh src javascript:', '<div><img src="javascript:alert(1)"></div>'],
+  ['ảnh src data:text/html', '<div><img src="data:text/html,<b>x</b>"></div>'],
+  ['iframe trong thân bài', '<div><iframe src="//ke-la.example"></iframe>chào</div>'],
+  ['bảng có onclick', '<table onclick="alert(1)"><tr><td>ô</td></tr></table>'],
+  ['thẻ nền ẩn đè màn', '<div style="position:fixed;inset:0;z-index:9999">x</div>'],
+]) {
+  const ra = locHtmlBaiViet(doc);
+  assert.ok(!/<script|<iframe|on(error|load|click)\s*=|javascript\s*:|data:text\/html|position\s*:\s*fixed/i.test(ra),
+    `❌ chế độ baiViet CÒN SÓT "${ten}": ${JSON.stringify(ra)}`);
+  ok(`thân bài vẫn cắt — ${ten}`);
+}
+
+// Lớp CSS: giữ theo HỌ TÊN. Kẻ ghi được vào kho mà mượn được lớp tiện ích của site (Tailwind
+// `fixed inset-0 z-50`) là dựng được tấm phủ kín màn đè lên nút thật — không cần chạy mã nào.
+const raLop = locHtmlBaiViet('<div class="elementor-element fixed inset-0 z-50 bg-white">x</div>');
+assert.ok(/class="elementor-element"/.test(raLop), `❌ lọc lớp quá tay, mất cả lớp lành: ${raLop}`);
+assert.ok(!/fixed|inset-0|z-50/.test(raLop), `❌ lọt lớp tiện ích của site — dựng được tấm phủ: ${raLop}`);
+ok('lớp CSS: giữ họ WordPress/Elementor, chặn lớp tiện ích mượn của site');
+
+assert.strictEqual(typeof quaCua.locHtmlBaiViet, 'function', '❌ cửa xuất thiếu `locHtmlBaiViet`');
+ok('cửa xuất có cả `locHtmlBaiViet`');
 
 console.log(`\n✅ loc-html: ${so} phép kiểm — PASS`);
