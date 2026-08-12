@@ -4,8 +4,12 @@ node_modules/
 .env
 .env.*
 
-# Claude Code (KHÔNG đẩy lên Git)
-CLAUDE.md
+# 📖 CLAUDE.md ĐÃ BỎ CHẶN (Bill chốt 12/08/2026). Nó là SỔ TAY CỦA REPO (cổng kiểm là gì, bẫy
+# nằm đâu) — thuộc về repo, KHÁC bộ nhớ riêng. Để ngoài git thì hỏng 3 kiểu, cả 3 đã xảy ra thật:
+# ① mục dần không ai soi ② mỗi máy một bản khác nhau ③ worktree của robot KHÔNG hề có file này ⇒
+# robot tự gộp + tự đăng bản thật mà mù mọi luật.
+# ⛔ RANH GIỚI GIỮ NGUYÊN: nội dung tủ bộ nhớ + secret TUYỆT ĐỐI không vào git — sổ tay chỉ được
+#    NHẮC TÊN tủ để biết đường tra. Repo CÔNG KHAI thì không nhắc cả tên két/tủ.
 
 # output tool con-mat (tạm, không deploy)
 con-mat-report/
